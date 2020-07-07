@@ -12,7 +12,7 @@ default = ["asyncstd"]
 asyncstd = ["async-std","futures-timer","tokio/sync"]
 tokio2 = ["tokio"]
 fixture = ["async-test-derive"]
-tls = ["rustls","webpki","async-tls"]
+tls = ["rustls","webpki","async-tls", "x509-parser"]
 unstable = []
 
 [dependencies]
@@ -32,7 +32,7 @@ webpki = { version = "0.21.2", optional = true }
 async-tls = {  version = "0.7.0", optional = true }
 async-test-derive = { path = "async-test-derive", version = "1.0.0", optional = true }
 flv-util = { version = "0.2.0" }
-
+x509-parser = { version = "0.8.0-beta3", optional = true }
 
 [dev-dependencies]
 lazy_static = "1.2.0"
