@@ -1,7 +1,8 @@
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
+use anyhow::Result;
 
-use super::error::Result;
+// use super::error::Result;
 
 #[derive(Debug)]
 pub struct Certificate(pub X509);

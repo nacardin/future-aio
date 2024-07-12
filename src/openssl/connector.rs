@@ -7,6 +7,7 @@ use futures_lite::io::{AsyncRead, AsyncWrite};
 use openssl::ssl;
 use openssl::x509::verify::X509VerifyFlags;
 use tracing::debug;
+use anyhow::{Result, Context};
 
 use crate::net::{
     tcp_stream::{stream, stream_with_opts, SocketOpts},
@@ -24,11 +25,9 @@ use super::stream::TlsStream;
 // TODO: simplification
 pub mod certs {
 
-    use std::io::Error as IoError;
-    use std::io::ErrorKind;
-
     use openssl::pkcs12::Pkcs12;
     use openssl::pkey::Private;
+    use anyhow::{Result, Context};
 
     use super::Certificate;
     use crate::net::certs::CertBuilder;
@@ -95,10 +94,8 @@ pub mod certs {
     }
 
     impl X509PemBuilder {
-        pub fn build(self) -> Result<Certificate, IoError> {
-            let cert = Certificate::from_pem(&self.0).map_err(|err| {
-                IoError::new(ErrorKind::InvalidInput, format!("invalid cert: {}", err))
-            })?;
+        pub fn build(self) -> Result<Certificate> {
+            let cert = Certificate::from_pem(&self.0).context("invalid cert")?;
             Ok(cert)
         }
     }
@@ -114,10 +111,8 @@ pub mod certs {
     }
 
     impl PrivateKeyBuilder {
-        pub fn build(self) -> Result<PrivateKey, IoError> {
-            let key = PrivateKey::private_key_from_pem(&self.0).map_err(|err| {
-                IoError::new(ErrorKind::InvalidInput, format!("invalid key: {}", err))
-            })?;
+        pub fn build(self) -> Result<PrivateKey> {
+            let key = PrivateKey::private_key_from_pem(&self.0).context("invalid key")?;
             Ok(key)
         }
     }
@@ -132,7 +127,7 @@ pub mod certs {
 
     impl IdentityBuilder {
         /// load pk12 from x509 certs
-        pub fn from_x509(x509: X509PemBuilder, key: PrivateKeyBuilder) -> Result<Self, IoError> {
+        pub fn from_x509(x509: X509PemBuilder, key: PrivateKeyBuilder) -> Result<Self> {
             let server_key = key.build()?;
             let server_crt = x509.build()?;
             let p12 = Pkcs12::builder()
@@ -140,21 +135,14 @@ pub mod certs {
                 .pkey(&server_key)
                 .cert(server_crt.inner())
                 .build2(PASSWORD)
-                .map_err(|e| {
-                    IoError::new(
-                        ErrorKind::InvalidData,
-                        format!("Failed to create Pkcs12: {}", e),
-                    )
-                })?;
+                .context("Failed to create Pkcs12")?;
 
             let der = p12.to_der()?;
             Ok(Self(der))
         }
 
-        pub fn build(self) -> Result<Identity, IoError> {
-            Identity::from_pkcs12(&self.0, PASSWORD).map_err(|e| {
-                IoError::new(ErrorKind::InvalidData, format!("Failed to load der: {}", e))
-            })
+        pub fn build(self) -> Result<Identity> {
+            Identity::from_pkcs12(&self.0, PASSWORD).context("Failed to load der")
         }
     }
 }
@@ -243,7 +231,7 @@ impl TlsConnectorBuilder {
 
     /// set identity
     pub fn with_identity(mut self, builder: certs::IdentityBuilder) -> Result<Self> {
-        let identity = builder.build()?;
+        let identity = builder.build().context("failed to build identity")?;
         self.inner.set_certificate(identity.cert())?;
         self.inner.set_private_key(identity.pkey())?;
         for cert in identity.chain().iter().rev() {
@@ -321,7 +309,7 @@ impl TcpDomainConnector for TlsDomainConnector {
     async fn connect(
         &self,
         addr: &str,
-    ) -> io::Result<(BoxWriteConnection, BoxReadConnection, ConnectionFd)> {
+    ) -> Result<(BoxWriteConnection, BoxReadConnection, ConnectionFd)> {
         debug!("connect to tls addr: {}", addr);
         let tcp_stream = stream(addr).await?;
         let fd = tcp_stream.as_connection_fd();
